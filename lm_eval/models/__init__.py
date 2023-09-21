@@ -4,6 +4,7 @@ from . import anthropic_llms
 from . import huggingface
 from . import textsynth
 from . import dummy
+from . import lit_llama
 
 MODEL_REGISTRY = {
     "hf": gpt2.HFLM,
@@ -16,7 +17,6 @@ MODEL_REGISTRY = {
     "textsynth": textsynth.TextSynthLM,
     "dummy": dummy.DummyLM,
     "lit-llama": lit_llama.LitLLaMA
-
 }
 
 

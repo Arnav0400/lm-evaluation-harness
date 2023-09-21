@@ -11,7 +11,7 @@ from lm_eval.models.gpt2 import HFLM
 
 import numpy as np
 import transformers
-
+import torch
 
 @positional_deprecated
 def simple_evaluate(
@@ -20,7 +20,6 @@ def simple_evaluate(
     tasks=[],
     num_fewshot=0,
     batch_size=None,
-    max_batch_size=None,
     device=None,
     no_cache=False,
     limit=None,
@@ -73,9 +72,24 @@ def simple_evaluate(
     if isinstance(model, str):
         if model_args is None:
             model_args = ""
+        if 'eval_config=' in model_args:
+            model_args, eval_config = model_args.split(',eval_config=')
+            print(model_args, eval_config)
+        else:
+            eval_config = ""
         lm = lm_eval.models.get_model(model).create_from_arg_string(
-            model_args, {"batch_size": batch_size, "max_batch_size": max_batch_size, "device": device}
+            model_args, {"batch_size": batch_size, "device": device}
         )
+        if eval_config:
+            eval_config = torch.load(eval_config)
+            eval_config = eval_config['keep_top_k'][50][0]
+            i = 0
+            for name, l in lm.model.named_modules():
+                if any(layer_name in name for layer_name in ["q_proj","k_proj","v_proj"]):
+                    l.eval_config = eval_config[i]
+                    i+=1
+            print(f'Setup config for {i} layers')
+
     elif isinstance(model, transformers.PreTrainedModel):
         lm = lm_eval.models.get_model("hf-causal")(
                 pretrained=model,
@@ -230,7 +244,7 @@ def evaluate(
         rnd = random.Random()
         rnd.seed(42)
         rnd.shuffle(task_docs)
-        print(f"Task: {task_name}; number of docs: {len(task_docs)}")
+        # print(f"Task: {task_name}; number of docs: {len(task_docs)}")
 
         if write_out:
             prompt_details = []
@@ -259,11 +273,11 @@ def evaluate(
                 prompt_details.append({"doc_id": doc_id})
 
             # print the prompt for the first few documents
-            if doc_id < 1:
-                print(
-                    f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
-                )
-                print("Requests:", reqs)
+            # if doc_id < 1:
+            #     print(
+            #         f"Task: {task_name}; document {doc_id}; context prompt (starting on next line):\n{ctx}\n(end of prompt on previous line)"
+            #     )
+            #     print("Requests:", reqs)
 
             if not isinstance(reqs, (list, tuple)):
                 reqs = [reqs]
@@ -300,7 +314,7 @@ def evaluate(
         #       solution. we could also implement some kind of auto-grouping here;
         #       they should end up next to each other.
 
-        print("Running", reqtype, "requests")
+        # print("Running", reqtype, "requests")
         resps = getattr(lm, reqtype)([req.args for req in reqs])
         resps = [
             x if req.index is None else x[req.index] for x, req in zip(resps, reqs)
